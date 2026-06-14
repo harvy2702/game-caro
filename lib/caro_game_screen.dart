@@ -3,8 +3,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:audioplayers/audioplayers.dart';
-import 'caro_bot.dart';
 
 class CaroGameScreen extends StatefulWidget {
   const CaroGameScreen({super.key});
@@ -13,7 +11,7 @@ class CaroGameScreen extends StatefulWidget {
   State<CaroGameScreen> createState() => _CaroGameScreenState();
 }
 
-class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStateMixin {
+class _CaroGameScreenState extends State<CaroGameScreen> {
   // --- Cấu hình game (Game Configuration) ---
   int _boardSize = 20; // Kích thước bàn cờ mặc định: 20x20
   final double _cellSize = 44.0; // Kích thước của mỗi ô cờ (pixel)
@@ -26,11 +24,6 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
   List<List<int>> _winningLine = []; // Danh sách tọa độ [row, col] của 5 ô chiến thắng để highlight
   int _moveCount = 0; // Đếm số nước đi để phát hiện hòa cờ nhanh hơn
 
-  // --- Chế độ chơi & Bot (Game Mode & Bot) ---
-  String _gameMode = ''; // '2P', 'BOT_EASY', 'BOT_HARD'
-  bool _isBotThinking = false;
-  late CaroBot _bot;
-
   // --- Điểm số (Scoreboard) ---
   int _xWins = 0;
   int _oWins = 0;
@@ -39,29 +32,6 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
   // --- Trạng thái tương tác chuột & Lịch sử nước đi (Hover & Move State) ---
   int? _hoveredRow;
   int? _hoveredCol;
-  int? _lastMoveRow; // Lưu hàng của nước đi cuối cùng để tạo animation
-  int? _lastMoveCol; // Lưu cột của nước đi cuối cùng để tạo animation
-
-  // --- Âm thanh (Audio) ---
-  final AudioPlayer _movePlayer = AudioPlayer();
-  final AudioPlayer _winPlayer = AudioPlayer();
-
-  // --- Animation Controller ---
-  late AnimationController _winBlinkController; // Controller cho hiệu ứng nhấp nháy khi thắng
-
-  void _playSound(String assetPath, {bool isWin = false}) async {
-    try {
-      if (isWin) {
-        await _winPlayer.stop();
-        await _winPlayer.play(AssetSource(assetPath));
-      } else {
-        await _movePlayer.stop();
-        await _movePlayer.play(AssetSource(assetPath));
-      }
-    } catch (e) {
-      debugPrint("Lỗi phát âm thanh: $e");
-    }
-  }
 
   String get _playerXName {
     final user = Supabase.instance.client.auth.currentUser;
@@ -76,22 +46,11 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
   @override
   void initState() {
     super.initState();
-    // Khởi tạo controller cho hiệu ứng nhấp nháy
-    _winBlinkController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
     _initializeBoard();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _showGameModeDialog();
-    });
   }
 
   @override
   void dispose() {
-    _winBlinkController.dispose();
-    _movePlayer.dispose();
-    _winPlayer.dispose();
     super.dispose();
   }
 
@@ -104,101 +63,9 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
     _moveCount = 0;
     _hoveredRow = null;
     _hoveredCol = null;
-    _lastMoveRow = null;
-    _lastMoveCol = null;
-    _isBotThinking = false;
-    _bot = CaroBot(_boardSize);
-    _winBlinkController.stop();
-    _winBlinkController.reset();
   }
 
-  void _showGameModeDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E24),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFF2C2C35), width: 1),
-          ),
-          title: const Center(
-            child: Text(
-              "Chọn chế độ chơi",
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
-            ),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildModeOption(
-                title: "2 Người Chơi",
-                icon: Icons.people,
-                color: const Color(0xFF00E5FF),
-                onTap: () {
-                  Navigator.pop(context);
-                  _setGameMode('2P');
-                },
-              ),
-              const SizedBox(height: 12),
-              _buildModeOption(
-                title: "Đấu với Máy (Dễ)",
-                icon: Icons.smart_toy_outlined,
-                color: const Color(0xFF4CAF50),
-                onTap: () {
-                  Navigator.pop(context);
-                  _setGameMode('BOT_EASY');
-                },
-              ),
-              const SizedBox(height: 12),
-              _buildModeOption(
-                title: "Đấu với Máy (Khó)",
-                icon: Icons.smart_toy,
-                color: const Color(0xFFFF4081),
-                onTap: () {
-                  Navigator.pop(context);
-                  _setGameMode('BOT_HARD');
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 
-  Widget _buildModeOption({required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.5)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(width: 16),
-            Text(
-              title,
-              style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _setGameMode(String mode) {
-    setState(() {
-      _gameMode = mode;
-      _resetScores(); // Đặt lại điểm số khi đổi chế độ
-    });
-  }
 
   // Đặt lại trò chơi (giữ nguyên điểm số)
   void _resetGame() {
@@ -282,20 +149,10 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
   void _makeMove(int row, int col) {
     // Nếu ô đã được đánh hoặc game đã kết thúc thì không làm gì cả
     if (_board[row][col] != "" || _winner != null) return;
-    
-    // Nếu đang đánh với máy và chưa tới lượt (hoặc máy đang suy nghĩ), chặn click
-    if (_gameMode.startsWith('BOT') && _currentPlayer == 'O' && !_isBotThinking) return;
-    if (_isBotThinking && _currentPlayer == 'X') return;
 
     setState(() {
       _board[row][col] = _currentPlayer;
       _moveCount++;
-      // Lưu lại tọa độ nước đi để kích hoạt hiệu ứng phóng to
-      _lastMoveRow = row;
-      _lastMoveCol = col;
-
-      // Phát âm thanh khi đánh cờ
-      _playSound('audio/move.wav');
 
       // Kiểm tra xem nước đi này có thắng không
       if (_checkWin(row, col, _currentPlayer)) {
@@ -305,10 +162,6 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
         } else {
           _oWins++;
         }
-        _playSound('audio/win.wav', isWin: true);
-        
-        // Bắt đầu hiệu ứng nhấp nháy cho các ô thắng cuộc
-        _winBlinkController.repeat(reverse: true);
         
         _showGameOverDialog("$_currentPlayer Chiến Thắng!");
       }
@@ -321,27 +174,7 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
       // Đổi lượt đi cho người chơi tiếp theo
       else {
         _currentPlayer = _currentPlayer == "X" ? "O" : "X";
-        
-        // Kích hoạt Bot nếu tới lượt Bot
-        if (_gameMode.startsWith('BOT') && _currentPlayer == "O") {
-          _isBotThinking = true;
-          Timer(const Duration(milliseconds: 500), () {
-            _makeBotMove();
-          });
-        }
       }
-    });
-  }
-
-  void _makeBotMove() {
-    if (_winner != null || !mounted) return;
-    BotDifficulty diff = _gameMode == 'BOT_HARD' ? BotDifficulty.hard : BotDifficulty.easy;
-    List<int>? move = _bot.findBestMove(_board, diff);
-    if (move != null) {
-      _makeMove(move[0], move[1]);
-    }
-    setState(() {
-      _isBotThinking = false;
     });
   }
 
@@ -854,21 +687,6 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
       ),
     );
 
-    // Nếu đây là ô thắng, thêm hiệu ứng nhấp nháy (AnimatedBuilder với _winBlinkController)
-    if (isWinning) {
-      cellWidget = AnimatedBuilder(
-        animation: _winBlinkController,
-        builder: (context, child) {
-          // Hiệu ứng nhấp nháy: opacity thay đổi từ 0.5 đến 1.0
-          return Opacity(
-            opacity: 0.5 + (_winBlinkController.value * 0.5),
-            child: child,
-          );
-        },
-        child: cellWidget,
-      );
-    }
-
     return MouseRegion(
       cursor: (val == "" && _winner == null) ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: (_) {
@@ -913,23 +731,7 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
         ),
       );
 
-      // Chỉ áp dụng hiệu ứng phóng to (scale animation) cho ô VỪA MỚI được đánh
-      // Điều này giúp tránh việc giật lag khi cuộn màn hình hoặc khi build lại toàn bàn cờ
-      if (row == _lastMoveRow && col == _lastMoveCol) {
-        return TweenAnimationBuilder<double>(
-          duration: const Duration(milliseconds: 200),
-          tween: Tween(begin: 0.0, end: 1.0),
-          builder: (context, scale, child) {
-            return Transform.scale(
-              scale: scale,
-              child: child,
-            );
-          },
-          child: textWidget,
-        );
-      } else {
-        return textWidget; // Không có hiệu ứng cho các ô cũ
-      }
+      return textWidget;
     }
 
     // 2. Trường hợp ô trống nhưng chuột đang di qua (Xem trước nước đi - Preview)
@@ -1014,54 +816,26 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
             ],
           ),
           const SizedBox(height: 12),
-          // Hàng chứa nút Đổi chế độ & Nút Chơi ván mới
-          Row(
-            children: [
-              Expanded(
-                flex: 1,
-                child: SizedBox(
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    onPressed: _showGameModeDialog,
-                    icon: const Icon(Icons.swap_horiz, size: 20),
-                    label: const Text(
-                      "Chế độ",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF00E5FF),
-                      side: const BorderSide(color: Color(0xFF00E5FF)),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                  ),
-                ),
+          // Nút Chơi ván mới
+          SizedBox(
+            height: 48,
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _resetGame,
+              icon: const Icon(Icons.replay),
+              label: const Text(
+                "Chơi ván mới",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.8),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: SizedBox(
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    onPressed: _resetGame,
-                    icon: const Icon(Icons.replay),
-                    label: const Text(
-                      "Chơi ván mới",
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.8),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4CAF50),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 4,
-                    ),
-                  ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                elevation: 4,
               ),
-            ],
+            ),
           ),
         ],
       ),
