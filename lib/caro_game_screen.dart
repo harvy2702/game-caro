@@ -1,8 +1,10 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'caro_bot.dart';
 
 class CaroGameScreen extends StatefulWidget {
   const CaroGameScreen({super.key});
@@ -15,6 +17,7 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
   // --- Cấu hình game (Game Configuration) ---
   int _boardSize = 20; // Kích thước bàn cờ mặc định: 20x20
   final double _cellSize = 44.0; // Kích thước của mỗi ô cờ (pixel)
+  double _sidebarWidth = 320.0; // Chiều rộng mặc định của sidebar
 
   // --- Trạng thái game (Game State) ---
   late List<List<String>> _board; // Bàn cờ 2D chứa các giá trị: "", "X", "O"
@@ -22,6 +25,11 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
   String? _winner; // Lưu người chiến thắng ("X", "O", "Draw" hoặc null nếu chưa kết thúc)
   List<List<int>> _winningLine = []; // Danh sách tọa độ [row, col] của 5 ô chiến thắng để highlight
   int _moveCount = 0; // Đếm số nước đi để phát hiện hòa cờ nhanh hơn
+
+  // --- Chế độ chơi & Bot (Game Mode & Bot) ---
+  String _gameMode = ''; // '2P', 'BOT_EASY', 'BOT_HARD'
+  bool _isBotThinking = false;
+  late CaroBot _bot;
 
   // --- Điểm số (Scoreboard) ---
   int _xWins = 0;
@@ -74,6 +82,9 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
       duration: const Duration(milliseconds: 500),
     );
     _initializeBoard();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showGameModeDialog();
+    });
   }
 
   @override
@@ -95,8 +106,98 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
     _hoveredCol = null;
     _lastMoveRow = null;
     _lastMoveCol = null;
+    _isBotThinking = false;
+    _bot = CaroBot(_boardSize);
     _winBlinkController.stop();
     _winBlinkController.reset();
+  }
+
+  void _showGameModeDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E24),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Color(0xFF2C2C35), width: 1),
+          ),
+          title: const Center(
+            child: Text(
+              "Chọn chế độ chơi",
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22),
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildModeOption(
+                title: "2 Người Chơi",
+                icon: Icons.people,
+                color: const Color(0xFF00E5FF),
+                onTap: () {
+                  Navigator.pop(context);
+                  _setGameMode('2P');
+                },
+              ),
+              const SizedBox(height: 12),
+              _buildModeOption(
+                title: "Đấu với Máy (Dễ)",
+                icon: Icons.smart_toy_outlined,
+                color: const Color(0xFF4CAF50),
+                onTap: () {
+                  Navigator.pop(context);
+                  _setGameMode('BOT_EASY');
+                },
+              ),
+              const SizedBox(height: 12),
+              _buildModeOption(
+                title: "Đấu với Máy (Khó)",
+                icon: Icons.smart_toy,
+                color: const Color(0xFFFF4081),
+                onTap: () {
+                  Navigator.pop(context);
+                  _setGameMode('BOT_HARD');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildModeOption({required String title, required IconData icon, required Color color, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.5)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(width: 16),
+            Text(
+              title,
+              style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _setGameMode(String mode) {
+    setState(() {
+      _gameMode = mode;
+      _resetScores(); // Đặt lại điểm số khi đổi chế độ
+    });
   }
 
   // Đặt lại trò chơi (giữ nguyên điểm số)
@@ -181,6 +282,10 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
   void _makeMove(int row, int col) {
     // Nếu ô đã được đánh hoặc game đã kết thúc thì không làm gì cả
     if (_board[row][col] != "" || _winner != null) return;
+    
+    // Nếu đang đánh với máy và chưa tới lượt (hoặc máy đang suy nghĩ), chặn click
+    if (_gameMode.startsWith('BOT') && _currentPlayer == 'O' && !_isBotThinking) return;
+    if (_isBotThinking && _currentPlayer == 'X') return;
 
     setState(() {
       _board[row][col] = _currentPlayer;
@@ -216,7 +321,27 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
       // Đổi lượt đi cho người chơi tiếp theo
       else {
         _currentPlayer = _currentPlayer == "X" ? "O" : "X";
+        
+        // Kích hoạt Bot nếu tới lượt Bot
+        if (_gameMode.startsWith('BOT') && _currentPlayer == "O") {
+          _isBotThinking = true;
+          Timer(const Duration(milliseconds: 500), () {
+            _makeBotMove();
+          });
+        }
       }
+    });
+  }
+
+  void _makeBotMove() {
+    if (_winner != null || !mounted) return;
+    BotDifficulty diff = _gameMode == 'BOT_HARD' ? BotDifficulty.hard : BotDifficulty.easy;
+    List<int>? move = _bot.findBestMove(_board, diff);
+    if (move != null) {
+      _makeMove(move[0], move[1]);
+    }
+    setState(() {
+      _isBotThinking = false;
     });
   }
 
@@ -362,25 +487,88 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
         ],
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            // 1. Khu vực hiển thị Điểm số & Trạng thái lượt đi
-            _buildScoreBoard(),
-            const SizedBox(height: 16),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth >= 800) {
+              // Layout dành cho màn hình lớn (PC/Tablet ngang): Sidebar bên trái, Bàn cờ bên phải
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Sidebar (Trái)
+                  Container(
+                    width: _sidebarWidth,
+                    padding: const EdgeInsets.only(top: 16.0),
+                    child: Column(
+                      children: [
+                        _buildScoreBoard(),
+                        const Spacer(),
+                        _buildControlBar(),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
+                  // Thanh kéo điều chỉnh độ rộng Sidebar
+                  MouseRegion(
+                    cursor: SystemMouseCursors.resizeLeftRight,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onPanUpdate: (details) {
+                        setState(() {
+                          _sidebarWidth += details.delta.dx;
+                          // Giới hạn độ rộng sidebar từ 250px đến 500px
+                          if (_sidebarWidth < 250) _sidebarWidth = 250;
+                          if (_sidebarWidth > 600) _sidebarWidth = 600;
+                        });
+                      },
+                      child: Container(
+                        width: 16,
+                        color: Colors.transparent, // Vùng bắt chạm rộng để dễ kéo
+                        child: Center(
+                          child: Container(
+                            width: 4,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2C2C35),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Bàn cờ (Phải)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 16.0, right: 16.0, bottom: 16.0),
+                      child: _buildGameBoardContainer(),
+                    ),
+                  ),
+                ],
+              );
+            } else {
+              // Layout dành cho màn hình nhỏ (Mobile): Cột dọc truyền thống
+              return Column(
+                children: [
+                  const SizedBox(height: 12),
+                  // 1. Khu vực hiển thị Điểm số & Trạng thái lượt đi
+                  _buildScoreBoard(),
+                  const SizedBox(height: 16),
 
-            // 2. Bàn cờ Caro (Zoomable & Pannable)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                child: _buildGameBoardContainer(),
-              ),
-            ),
+                  // 2. Bàn cờ Caro (Zoomable & Pannable)
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                      child: _buildGameBoardContainer(),
+                    ),
+                  ),
 
-            // 3. Thanh công cụ bên dưới (Menu & Khởi động lại)
-            _buildControlBar(),
-            const SizedBox(height: 16),
-          ],
+                  // 3. Thanh công cụ bên dưới (Menu & Khởi động lại)
+                  _buildControlBar(),
+                  const SizedBox(height: 16),
+                ],
+              );
+            }
+          },
         ),
       ),
     );
@@ -402,38 +590,47 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
             children: [
               // Hàng điểm số
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildPlayerScoreCard(
-                    _playerXName,
-                    _xWins,
-                    const Color(0xFF00E5FF),
-                    _currentPlayer == "X" && _winner == null,
-                    email: _playerXEmail,
+                  Expanded(
+                    child: _buildPlayerScoreCard(
+                      _playerXName,
+                      _xWins,
+                      const Color(0xFF00E5FF),
+                      _currentPlayer == "X" && _winner == null,
+                      email: _playerXEmail,
+                    ),
                   ),
-                  _buildDrawScoreCard(),
-                  _buildPlayerScoreCard(
-                    "Player O",
-                    _oWins,
-                    const Color(0xFFFF4081),
-                    _currentPlayer == "O" && _winner == null,
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6.0),
+                    child: _buildDrawScoreCard(),
+                  ),
+                  Expanded(
+                    child: _buildPlayerScoreCard(
+                      "Player O",
+                      _oWins,
+                      const Color(0xFFFF4081),
+                      _currentPlayer == "O" && _winner == null,
+                    ),
                   ),
                 ],
               ),
               const Divider(color: Color(0xFF2C2C35), height: 24),
               // Trạng thái hiện tại
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              Wrap(
+                alignment: WrapAlignment.center,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 4.0,
                 children: [
                   const Text(
-                    "Trạng thái: ",
-                    style: TextStyle(color: Colors.white70, fontSize: 15),
+                    "Trạng thái:",
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
                   ),
                   if (_winner != null) ...[
                     Text(
-                      _winner == "Draw" ? "Hòa cờ!" : "Người chơi $_winner chiến thắng! 🎉",
+                      _winner == "Draw" ? "Hòa cờ!" : "$_winner chiến thắng! 🎉",
                       style: TextStyle(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: _winner == "X"
                             ? const Color(0xFF00E5FF)
@@ -443,9 +640,9 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
                       ),
                     ),
                   ] else ...[
-                    const Text("Đang chơi. Lượt của ", style: TextStyle(color: Colors.white70)),
+                    const Text("Lượt của", style: TextStyle(color: Colors.white70, fontSize: 14)),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: _currentPlayer == "X"
                             ? const Color(0xFF00E5FF).withOpacity(0.15)
@@ -476,7 +673,7 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
   Widget _buildPlayerScoreCard(String name, int score, Color color, bool isActive, {String? email}) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
         color: isActive ? color.withOpacity(0.12) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
@@ -498,6 +695,9 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
         children: [
           Text(
             name,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -508,6 +708,9 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
             const SizedBox(height: 2),
             Text(
               email,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontSize: 9,
                 color: Colors.white38,
@@ -811,26 +1014,54 @@ class _CaroGameScreenState extends State<CaroGameScreen> with TickerProviderStat
             ],
           ),
           const SizedBox(height: 12),
-          // Nút Chơi ván mới (Khởi động lại bàn cờ)
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              onPressed: _resetGame,
-              icon: const Icon(Icons.replay),
-              label: const Text(
-                "Chơi ván mới",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.8),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4CAF50),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          // Hàng chứa nút Đổi chế độ & Nút Chơi ván mới
+          Row(
+            children: [
+              Expanded(
+                flex: 1,
+                child: SizedBox(
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: _showGameModeDialog,
+                    icon: const Icon(Icons.swap_horiz, size: 20),
+                    label: const Text(
+                      "Chế độ",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF00E5FF),
+                      side: const BorderSide(color: Color(0xFF00E5FF)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
                 ),
-                elevation: 4,
               ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    onPressed: _resetGame,
+                    icon: const Icon(Icons.replay),
+                    label: const Text(
+                      "Chơi ván mới",
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 0.8),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4CAF50),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 4,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
