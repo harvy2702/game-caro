@@ -1,30 +1,75 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:game_caro/main.dart';
+import 'package:game_caro/profile_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('validatePasswordChangeInput', () {
+    test('requires all fields', () {
+      expect(
+        validatePasswordChangeInput(
+          oldPassword: '',
+          newPassword: 'abcdef',
+          confirmPassword: 'abcdef',
+        ),
+        'Vui lòng nhập mật khẩu hiện tại.',
+      );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      expect(
+        validatePasswordChangeInput(
+          oldPassword: 'oldpass',
+          newPassword: '',
+          confirmPassword: 'abcdef',
+        ),
+        'Vui lòng nhập mật khẩu mới.',
+      );
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      expect(
+        validatePasswordChangeInput(
+          oldPassword: 'oldpass',
+          newPassword: 'abcdef',
+          confirmPassword: '',
+        ),
+        'Vui lòng xác nhận mật khẩu mới.',
+      );
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('validates new password rules', () {
+      expect(
+        validatePasswordChangeInput(
+          oldPassword: 'oldpass',
+          newPassword: '12345',
+          confirmPassword: '12345',
+        ),
+        'Mật khẩu mới tối thiểu phải 6 ký tự.',
+      );
+
+      expect(
+        validatePasswordChangeInput(
+          oldPassword: 'oldpass',
+          newPassword: 'newpass',
+          confirmPassword: 'different',
+        ),
+        'Xác nhận mật khẩu không khớp.',
+      );
+
+      expect(
+        validatePasswordChangeInput(
+          oldPassword: 'samepass',
+          newPassword: 'samepass',
+          confirmPassword: 'samepass',
+        ),
+        'Mật khẩu mới phải khác mật khẩu hiện tại.',
+      );
+    });
+
+    test('returns null when input is valid', () {
+      expect(
+        validatePasswordChangeInput(
+          oldPassword: 'oldpass',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        ),
+        isNull,
+      );
+    });
   });
 }
