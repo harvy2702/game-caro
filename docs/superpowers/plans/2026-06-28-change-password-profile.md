@@ -124,9 +124,6 @@ Expected: FAIL because `package:game_caro/profile_screen.dart` does not exist.
 Create `lib/profile_screen.dart` with:
 
 ```dart
-import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 String? validatePasswordChangeInput({
   required String oldPassword,
   required String newPassword,
