@@ -148,7 +148,7 @@ void main() {
           usernameOverride: 'demo_user',
           emailOverride: 'demo@caro.local',
           skipInitialAvatarLoad: true,
-          changePasswordOverride: (_, __) async {
+          changePasswordOverride: (oldPassword, newPassword) async {
             submitCount++;
           },
         ),
@@ -204,7 +204,7 @@ void main() {
           usernameOverride: 'demo_user',
           emailOverride: 'demo@caro.local',
           skipInitialAvatarLoad: true,
-          changePasswordOverride: (_, __) async {
+          changePasswordOverride: (oldPassword, newPassword) async {
             throw const AuthException('Invalid login credentials');
           },
         ),

@@ -166,6 +166,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       await _evictPreviousAvatar();
 
+      if (!mounted) return;
+
       setState(() {
         _avatarUrl = avatarUrl;
         _avatarVersion++;
@@ -361,7 +363,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _avatarUrl!,
                         key: ValueKey('avatar-$_avatarVersion-$_avatarUrl'),
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildAvatarFallback(),
+                        errorBuilder: (context, error, stackTrace) => _buildAvatarFallback(),
                       ),
               ),
               if (isBusy)
