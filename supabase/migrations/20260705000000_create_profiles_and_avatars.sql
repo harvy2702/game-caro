@@ -8,7 +8,7 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
-create or replace function public.set_updated_at()
+create or replace function public.set_profiles_updated_at()
 returns trigger
 language plpgsql
 as $$
@@ -23,7 +23,7 @@ drop trigger if exists set_profiles_updated_at on public.profiles;
 create trigger set_profiles_updated_at
 before update on public.profiles
 for each row
-execute function public.set_updated_at();
+execute function public.set_profiles_updated_at();
 
 create or replace function public.handle_new_user_profile()
 returns trigger
@@ -51,18 +51,49 @@ after insert on auth.users
 for each row
 execute function public.handle_new_user_profile();
 
+with auth_user_profiles as (
+  select
+    users.id,
+    nullif(users.raw_user_meta_data ->> 'username', '') as username,
+    coalesce(users.created_at, timezone('utc'::text, now())) as created_at
+  from auth.users
+),
+unique_auth_usernames as (
+  select username
+  from auth_user_profiles
+  where username is not null
+  group by username
+  having count(*) = 1
+)
 insert into public.profiles (id, username, created_at, updated_at)
 select
-  users.id,
-  nullif(users.raw_user_meta_data ->> 'username', ''),
-  coalesce(users.created_at, timezone('utc'::text, now())),
+  auth_user_profiles.id,
+  case
+    when unique_auth_usernames.username is not null
+      and not exists (
+        select 1
+        from public.profiles existing_profiles
+        where existing_profiles.username = auth_user_profiles.username
+          and existing_profiles.id <> auth_user_profiles.id
+      )
+    then auth_user_profiles.username
+    else null
+  end,
+  auth_user_profiles.created_at,
   timezone('utc'::text, now())
-from auth.users
+from auth_user_profiles
+left join unique_auth_usernames
+  on unique_auth_usernames.username = auth_user_profiles.username
 on conflict (id) do nothing;
 
 drop policy if exists "Profiles are readable by everyone" on public.profiles;
 drop policy if exists "Users can insert their own profile" on public.profiles;
 drop policy if exists "Users can update their own profile" on public.profiles;
+
+grant select on public.profiles to anon, authenticated;
+grant insert on public.profiles to authenticated;
+revoke update on public.profiles from authenticated;
+grant update (avatar_url) on public.profiles to authenticated;
 
 create policy "Profiles are readable by everyone"
 on public.profiles
