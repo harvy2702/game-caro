@@ -28,5 +28,7 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Chọn ảnh từ thư viện để cập nhật ảnh đại diện.</string>
 </dict>
 </plist>
