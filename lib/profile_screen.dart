@@ -29,6 +29,30 @@ String? validatePasswordChangeInput({
   return null;
 }
 
+String avatarStoragePath({
+  required String userId,
+  required String fileName,
+}) {
+  final extension = _avatarFileExtension(fileName);
+  return '$userId/avatar.$extension';
+}
+
+String avatarContentTypeFromPath(String path) {
+  final lowerPath = path.toLowerCase();
+  if (lowerPath.endsWith('.png')) return 'image/png';
+  if (lowerPath.endsWith('.webp')) return 'image/webp';
+  if (lowerPath.endsWith('.gif')) return 'image/gif';
+  return 'image/jpeg';
+}
+
+String _avatarFileExtension(String fileName) {
+  final lowerName = fileName.toLowerCase();
+  if (lowerName.endsWith('.png')) return 'png';
+  if (lowerName.endsWith('.webp')) return 'webp';
+  if (lowerName.endsWith('.gif')) return 'gif';
+  return 'jpg';
+}
+
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
     super.key,
@@ -42,13 +66,15 @@ class ProfileScreen extends StatelessWidget {
   final Future<void> Function(String oldPassword, String newPassword)? changePasswordOverride;
 
   String get _username {
+    if (usernameOverride != null) return usernameOverride!;
     final user = Supabase.instance.client.auth.currentUser;
-    return usernameOverride ?? user?.userMetadata?['username'] as String? ?? 'Người chơi';
+    return user?.userMetadata?['username'] as String? ?? 'Người chơi';
   }
 
   String get _email {
+    if (emailOverride != null) return emailOverride!;
     final user = Supabase.instance.client.auth.currentUser;
-    return emailOverride ?? user?.email ?? 'Không có email';
+    return user?.email ?? 'Không có email';
   }
 
   @override

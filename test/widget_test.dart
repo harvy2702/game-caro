@@ -75,6 +75,33 @@ void main() {
     });
   });
 
+  group('avatar upload helpers', () {
+    test('builds a stable per-user avatar storage path', () {
+      expect(
+        avatarStoragePath(userId: 'user-123', fileName: 'photo.PNG'),
+        'user-123/avatar.png',
+      );
+
+      expect(
+        avatarStoragePath(userId: 'user-123', fileName: 'photo.jpeg'),
+        'user-123/avatar.jpg',
+      );
+
+      expect(
+        avatarStoragePath(userId: 'user-123', fileName: 'photo.unknown'),
+        'user-123/avatar.jpg',
+      );
+    });
+
+    test('returns supported avatar content types', () {
+      expect(avatarContentTypeFromPath('user-123/avatar.jpg'), 'image/jpeg');
+      expect(avatarContentTypeFromPath('user-123/avatar.png'), 'image/png');
+      expect(avatarContentTypeFromPath('user-123/avatar.webp'), 'image/webp');
+      expect(avatarContentTypeFromPath('user-123/avatar.gif'), 'image/gif');
+      expect(avatarContentTypeFromPath('user-123/avatar.bin'), 'image/jpeg');
+    });
+  });
+
   testWidgets('ProfileScreen shows account info and change password option', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
