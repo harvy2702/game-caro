@@ -1,6 +1,9 @@
 // ignore_for_file: deprecated_member_use
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 String? validatePasswordChangeInput({
@@ -53,28 +56,211 @@ String _avatarFileExtension(String fileName) {
   return 'jpg';
 }
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
     super.key,
     this.usernameOverride,
     this.emailOverride,
+    this.avatarUrlOverride,
+    this.skipInitialAvatarLoad = false,
+    this.loadAvatarUrlOverride,
+    this.uploadAvatarOverride,
     this.changePasswordOverride,
   });
 
   final String? usernameOverride;
   final String? emailOverride;
+  final String? avatarUrlOverride;
+  final bool skipInitialAvatarLoad;
+  final Future<String?> Function()? loadAvatarUrlOverride;
+  final Future<String?> Function()? uploadAvatarOverride;
   final Future<void> Function(String oldPassword, String newPassword)? changePasswordOverride;
 
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final ImagePicker _imagePicker = ImagePicker();
+
+  String? _avatarUrl;
+  bool _isAvatarLoading = false;
+  bool _isAvatarUploading = false;
+  int _avatarVersion = 0;
+
   String get _username {
-    if (usernameOverride != null) return usernameOverride!;
+    if (widget.usernameOverride != null) return widget.usernameOverride!;
     final user = Supabase.instance.client.auth.currentUser;
     return user?.userMetadata?['username'] as String? ?? 'Người chơi';
   }
 
   String get _email {
-    if (emailOverride != null) return emailOverride!;
+    if (widget.emailOverride != null) return widget.emailOverride!;
     final user = Supabase.instance.client.auth.currentUser;
     return user?.email ?? 'Không có email';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _avatarUrl = widget.avatarUrlOverride;
+    if (!widget.skipInitialAvatarLoad && widget.avatarUrlOverride == null) {
+      _loadAvatarUrl();
+    }
+  }
+
+  Future<void> _loadAvatarUrl() async {
+    setState(() {
+      _isAvatarLoading = true;
+    });
+
+    try {
+      final avatarUrl = widget.loadAvatarUrlOverride != null
+          ? await widget.loadAvatarUrlOverride!()
+          : await _fetchAvatarUrl();
+
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = avatarUrl;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _avatarUrl = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAvatarLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<String?> _fetchAvatarUrl() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return null;
+
+    final profile = await Supabase.instance.client
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    return profile?['avatar_url'] as String?;
+  }
+
+  Future<void> _handleAvatarTap() async {
+    if (_isAvatarUploading) return;
+
+    setState(() {
+      _isAvatarUploading = true;
+    });
+
+    try {
+      final avatarUrl = widget.uploadAvatarOverride != null
+          ? await widget.uploadAvatarOverride!()
+          : await _pickAndUploadAvatar();
+
+      if (!mounted || avatarUrl == null) return;
+
+      await _evictPreviousAvatar();
+
+      setState(() {
+        _avatarUrl = avatarUrl;
+        _avatarVersion++;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cập nhật ảnh đại diện thành công!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_avatarUploadErrorMessage(e)),
+          backgroundColor: const Color(0xFFFF4081),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isAvatarUploading = false;
+        });
+      }
+    }
+  }
+
+  Future<String?> _pickAndUploadAvatar() async {
+    final supabase = Supabase.instance.client;
+    final user = supabase.auth.currentUser;
+
+    if (user == null) {
+      throw StateError('Vui lòng đăng nhập lại để cập nhật ảnh đại diện.');
+    }
+
+    final pickedImage = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+
+    if (pickedImage == null) return null;
+
+    final bytes = await pickedImage.readAsBytes();
+    if (bytes.isEmpty) {
+      throw StateError('Không thể đọc ảnh đã chọn.');
+    }
+
+    final path = avatarStoragePath(
+      userId: user.id,
+      fileName: pickedImage.name,
+    );
+    final contentType = avatarContentTypeFromPath(path);
+
+    await supabase.storage.from('avatars').uploadBinary(
+          path,
+          Uint8List.fromList(bytes),
+          fileOptions: FileOptions(
+            contentType: contentType,
+            upsert: true,
+          ),
+        );
+
+    final publicUrl = supabase.storage.from('avatars').getPublicUrl(path);
+
+    await supabase.from('profiles').update({
+      'avatar_url': publicUrl,
+    }).eq('id', user.id);
+
+    return publicUrl;
+  }
+
+  Future<void> _evictPreviousAvatar() async {
+    final avatarUrl = _avatarUrl;
+    if (avatarUrl == null || avatarUrl.isEmpty) return;
+    await NetworkImage(avatarUrl).evict();
+  }
+
+  String _avatarUploadErrorMessage(Object error) {
+    final message = error.toString();
+    if (message.contains('Vui lòng đăng nhập lại')) {
+      return 'Vui lòng đăng nhập lại để cập nhật ảnh đại diện.';
+    }
+    if (message.contains('Không thể đọc ảnh')) {
+      return 'Không thể đọc ảnh đã chọn.';
+    }
+    if (message.contains('Network connection lost') || message.contains('Failed host lookup')) {
+      return 'Không có kết nối internet. Vui lòng kiểm tra lại.';
+    }
+    if (error is StateError && error.message.isNotEmpty) {
+      return error.message;
+    }
+    return 'Không thể cập nhật ảnh đại diện.';
   }
 
   @override
@@ -104,14 +290,7 @@ class ProfileScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF00E5FF).withOpacity(0.12),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.person, color: Color(0xFF00E5FF), size: 32),
-                    ),
+                    _buildAvatarButton(),
                     const SizedBox(width: 14),
                     Expanded(
                       child: Column(
@@ -161,11 +340,80 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildAvatarButton() {
+    final isBusy = _isAvatarLoading || _isAvatarUploading;
+
+    return Tooltip(
+      message: 'Đổi ảnh đại diện',
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: isBusy ? null : _handleAvatarTap,
+        child: SizedBox(
+          width: 64,
+          height: 64,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              ClipOval(
+                child: _avatarUrl == null || _avatarUrl!.isEmpty
+                    ? _buildAvatarFallback()
+                    : Image.network(
+                        _avatarUrl!,
+                        key: ValueKey('avatar-$_avatarVersion-$_avatarUrl'),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _buildAvatarFallback(),
+                      ),
+              ),
+              if (isBusy)
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.45),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00E5FF)),
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00E5FF),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF1A1A22), width: 2),
+                  ),
+                  child: const Icon(Icons.camera_alt, size: 12, color: Colors.black),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatarFallback() {
+    return Container(
+      color: const Color(0xFF00E5FF).withOpacity(0.12),
+      child: const Icon(Icons.person, color: Color(0xFF00E5FF), size: 32),
+    );
+  }
+
   Future<void> _showChangePasswordDialog(BuildContext context) {
     return showDialog<void>(
       context: context,
       builder: (context) => _ChangePasswordDialog(
-        onSubmit: changePasswordOverride ?? _changePassword,
+        onSubmit: widget.changePasswordOverride ?? _changePassword,
       ),
     );
   }
