@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'profile_screen.dart';
 
 class CaroGameScreen extends StatefulWidget {
   const CaroGameScreen({super.key});
@@ -286,6 +287,17 @@ class _CaroGameScreenState extends State<CaroGameScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.person, color: Colors.white70),
+            tooltip: 'Hồ sơ',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => const ProfileScreen(),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.white70),
             tooltip: 'Đăng xuất',

@@ -1,4 +1,6 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:game_caro/profile_screen.dart';
 
 void main() {
@@ -71,5 +73,122 @@ void main() {
         isNull,
       );
     });
+  });
+
+  testWidgets('ProfileScreen shows account info and change password option', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+        ),
+      ),
+    );
+
+    expect(find.text('Hồ sơ'), findsOneWidget);
+    expect(find.text('demo_user'), findsOneWidget);
+    expect(find.text('demo@caro.local'), findsOneWidget);
+    expect(find.text('Đổi mật khẩu'), findsOneWidget);
+  });
+
+  testWidgets('Change password option opens dialog with three fields', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Đổi mật khẩu'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mật khẩu hiện tại'), findsOneWidget);
+    expect(find.text('Mật khẩu mới'), findsOneWidget);
+    expect(find.text('Xác nhận mật khẩu mới'), findsOneWidget);
+    expect(find.text('Cập nhật'), findsOneWidget);
+  });
+
+  testWidgets('Change password dialog shows validation errors before submit', (tester) async {
+    var submitCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+          changePasswordOverride: (_, __) async {
+            submitCount++;
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Đổi mật khẩu'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cập nhật'));
+    await tester.pump();
+
+    expect(find.text('Vui lòng nhập mật khẩu hiện tại.'), findsOneWidget);
+    expect(submitCount, 0);
+  });
+
+  testWidgets('Change password dialog submits valid passwords and shows success', (tester) async {
+    var submittedOldPassword = '';
+    var submittedNewPassword = '';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+          changePasswordOverride: (oldPassword, newPassword) async {
+            submittedOldPassword = oldPassword;
+            submittedNewPassword = newPassword;
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Đổi mật khẩu'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Mật khẩu hiện tại'), 'oldpass');
+    await tester.enterText(find.widgetWithText(TextField, 'Mật khẩu mới'), 'newpass');
+    await tester.enterText(find.widgetWithText(TextField, 'Xác nhận mật khẩu mới'), 'newpass');
+    await tester.tap(find.text('Cập nhật'));
+    await tester.pumpAndSettle();
+
+    expect(submittedOldPassword, 'oldpass');
+    expect(submittedNewPassword, 'newpass');
+    expect(find.text('Đổi mật khẩu thành công!'), findsOneWidget);
+    expect(find.text('Mật khẩu hiện tại'), findsNothing);
+  });
+
+  testWidgets('Change password dialog keeps form open on submit failure', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+          changePasswordOverride: (_, __) async {
+            throw const AuthException('Invalid login credentials');
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Đổi mật khẩu'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Mật khẩu hiện tại'), 'wrongpass');
+    await tester.enterText(find.widgetWithText(TextField, 'Mật khẩu mới'), 'newpass');
+    await tester.enterText(find.widgetWithText(TextField, 'Xác nhận mật khẩu mới'), 'newpass');
+    await tester.tap(find.text('Cập nhật'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mật khẩu hiện tại'), findsOneWidget);
+    expect(find.text('Mật khẩu hiện tại không chính xác.'), findsOneWidget);
   });
 }
