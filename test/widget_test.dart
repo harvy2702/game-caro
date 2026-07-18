@@ -75,12 +75,40 @@ void main() {
     });
   });
 
+  group('avatar upload helpers', () {
+    test('builds a stable per-user avatar storage path', () {
+      expect(
+        avatarStoragePath(userId: 'user-123', fileName: 'photo.PNG'),
+        'user-123/avatar.png',
+      );
+
+      expect(
+        avatarStoragePath(userId: 'user-123', fileName: 'photo.jpeg'),
+        'user-123/avatar.jpg',
+      );
+
+      expect(
+        avatarStoragePath(userId: 'user-123', fileName: 'photo.unknown'),
+        'user-123/avatar.jpg',
+      );
+    });
+
+    test('returns supported avatar content types', () {
+      expect(avatarContentTypeFromPath('user-123/avatar.jpg'), 'image/jpeg');
+      expect(avatarContentTypeFromPath('user-123/avatar.png'), 'image/png');
+      expect(avatarContentTypeFromPath('user-123/avatar.webp'), 'image/webp');
+      expect(avatarContentTypeFromPath('user-123/avatar.gif'), 'image/gif');
+      expect(avatarContentTypeFromPath('user-123/avatar.bin'), 'image/jpeg');
+    });
+  });
+
   testWidgets('ProfileScreen shows account info and change password option', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: ProfileScreen(
           usernameOverride: 'demo_user',
           emailOverride: 'demo@caro.local',
+          skipInitialAvatarLoad: true,
         ),
       ),
     );
@@ -97,6 +125,7 @@ void main() {
         home: ProfileScreen(
           usernameOverride: 'demo_user',
           emailOverride: 'demo@caro.local',
+          skipInitialAvatarLoad: true,
         ),
       ),
     );
@@ -118,7 +147,8 @@ void main() {
         home: ProfileScreen(
           usernameOverride: 'demo_user',
           emailOverride: 'demo@caro.local',
-          changePasswordOverride: (_, __) async {
+          skipInitialAvatarLoad: true,
+          changePasswordOverride: (oldPassword, newPassword) async {
             submitCount++;
           },
         ),
@@ -143,6 +173,7 @@ void main() {
         home: ProfileScreen(
           usernameOverride: 'demo_user',
           emailOverride: 'demo@caro.local',
+          skipInitialAvatarLoad: true,
           changePasswordOverride: (oldPassword, newPassword) async {
             submittedOldPassword = oldPassword;
             submittedNewPassword = newPassword;
@@ -172,7 +203,8 @@ void main() {
         home: ProfileScreen(
           usernameOverride: 'demo_user',
           emailOverride: 'demo@caro.local',
-          changePasswordOverride: (_, __) async {
+          skipInitialAvatarLoad: true,
+          changePasswordOverride: (oldPassword, newPassword) async {
             throw const AuthException('Invalid login credentials');
           },
         ),
@@ -190,5 +222,99 @@ void main() {
 
     expect(find.text('Mật khẩu hiện tại'), findsOneWidget);
     expect(find.text('Mật khẩu hiện tại không chính xác.'), findsOneWidget);
+  });
+
+  testWidgets('ProfileScreen shows avatar fallback when no avatar URL exists', (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+          skipInitialAvatarLoad: true,
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Đổi ảnh đại diện'), findsOneWidget);
+    expect(find.byIcon(Icons.person), findsOneWidget);
+  });
+
+  testWidgets('ProfileScreen shows network avatar when avatar URL exists', (tester) async {
+    const avatarUrl = 'https://example.com/avatar.jpg';
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+          avatarUrlOverride: avatarUrl,
+          skipInitialAvatarLoad: true,
+        ),
+      ),
+    );
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Image &&
+            widget.image is NetworkImage &&
+            (widget.image as NetworkImage).url == avatarUrl,
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ProfileScreen uploads avatar when avatar is tapped', (tester) async {
+    var uploadCount = 0;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+          skipInitialAvatarLoad: true,
+          uploadAvatarOverride: () async {
+            uploadCount++;
+            return 'https://example.com/new-avatar.jpg';
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Đổi ảnh đại diện'));
+    await tester.pumpAndSettle();
+
+    expect(uploadCount, 1);
+    expect(find.text('Cập nhật ảnh đại diện thành công!'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Image &&
+            widget.image is NetworkImage &&
+            (widget.image as NetworkImage).url == 'https://example.com/new-avatar.jpg',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('ProfileScreen shows avatar upload errors', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileScreen(
+          usernameOverride: 'demo_user',
+          emailOverride: 'demo@caro.local',
+          skipInitialAvatarLoad: true,
+          uploadAvatarOverride: () async {
+            throw StateError('Không thể cập nhật ảnh đại diện.');
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Đổi ảnh đại diện'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Không thể cập nhật ảnh đại diện.'), findsOneWidget);
+    expect(find.byIcon(Icons.person), findsOneWidget);
   });
 }

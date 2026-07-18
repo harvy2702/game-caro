@@ -45,5 +45,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Chọn ảnh từ thư viện để cập nhật ảnh đại diện.</string>
 </dict>
 </plist>
