@@ -13,10 +13,10 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final _supabase = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
-  
+
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  
+
   bool _isSignUp = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
@@ -112,10 +112,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final email = _getEmail(username);
 
     try {
-      await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+      await _supabase.auth.signInWithPassword(email: email, password: password);
     } on AuthException catch (e) {
       setState(() {
         _errorMessage = _translateAuthError(e.message);
@@ -144,7 +141,8 @@ class _AuthScreenState extends State<AuthScreen> {
     if (message.contains('Password should be')) {
       return 'Mật khẩu phải chứa ít nhất 6 ký tự.';
     }
-    if (message.contains('Network connection lost') || message.contains('Failed host lookup')) {
+    if (message.contains('Network connection lost') ||
+        message.contains('Failed host lookup')) {
       return 'Không có kết nối internet. Vui lòng kiểm tra lại.';
     }
     return message;
@@ -203,7 +201,7 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    'Caro Premium',
+                    'Caro',
                     style: TextStyle(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
@@ -213,11 +211,10 @@ class _AuthScreenState extends State<AuthScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _isSignUp ? 'Đăng ký tài khoản mới' : 'Đăng nhập để tiếp tục chơi',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      color: Colors.white60,
-                    ),
+                    _isSignUp
+                        ? 'Đăng ký tài khoản mới'
+                        : 'Đăng nhập để tiếp tục chơi',
+                    style: const TextStyle(fontSize: 15, color: Colors.white60),
                   ),
                   const SizedBox(height: 32),
 
@@ -226,7 +223,10 @@ class _AuthScreenState extends State<AuthScreen> {
                     color: const Color(0xFF1E1E24),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
-                      side: const BorderSide(color: Color(0xFF2C2C35), width: 1.5),
+                      side: const BorderSide(
+                        color: Color(0xFF2C2C35),
+                        width: 1.5,
+                      ),
                     ),
                     elevation: 8,
                     child: Padding(
@@ -240,11 +240,18 @@ class _AuthScreenState extends State<AuthScreen> {
                             style: const TextStyle(color: Colors.white),
                             decoration: InputDecoration(
                               labelText: 'Tên đăng nhập',
-                              labelStyle: const TextStyle(color: Colors.white60),
-                              prefixIcon: const Icon(Icons.person, color: Colors.white60),
+                              labelStyle: const TextStyle(
+                                color: Colors.white60,
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.person,
+                                color: Colors.white60,
+                              ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Color(0xFF2C2C35)),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF2C2C35),
+                                ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -278,11 +285,18 @@ class _AuthScreenState extends State<AuthScreen> {
                             style: const TextStyle(color: Colors.white),
                             decoration: InputDecoration(
                               labelText: 'Mật khẩu',
-                              labelStyle: const TextStyle(color: Colors.white60),
-                              prefixIcon: const Icon(Icons.lock_outline, color: Colors.white60),
+                              labelStyle: const TextStyle(
+                                color: Colors.white60,
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.lock_outline,
+                                color: Colors.white60,
+                              ),
                               suffixIcon: IconButton(
                                 icon: Icon(
-                                  _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                                  _obscurePassword
+                                      ? Icons.visibility_off
+                                      : Icons.visibility,
                                   color: Colors.white60,
                                 ),
                                 onPressed: () {
@@ -293,7 +307,9 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                               enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(color: Color(0xFF2C2C35)),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF2C2C35),
+                                ),
                               ),
                               focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -323,15 +339,23 @@ class _AuthScreenState extends State<AuthScreen> {
                           if (_errorMessage != null) ...[
                             const SizedBox(height: 16),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: secondaryColor.withOpacity(0.1),
-                                border: Border.all(color: secondaryColor.withOpacity(0.5)),
+                                border: Border.all(
+                                  color: secondaryColor.withOpacity(0.5),
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 _errorMessage!,
-                                style: TextStyle(color: secondaryColor, fontSize: 13),
+                                style: TextStyle(
+                                  color: secondaryColor,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                           ],
@@ -344,7 +368,9 @@ class _AuthScreenState extends State<AuthScreen> {
                             child: ElevatedButton(
                               onPressed: _isLoading ? null : _handleSubmit,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: _isSignUp ? secondaryColor : primaryColor,
+                                backgroundColor: _isSignUp
+                                    ? secondaryColor
+                                    : primaryColor,
                                 foregroundColor: Colors.black,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -357,7 +383,10 @@ class _AuthScreenState extends State<AuthScreen> {
                                       width: 24,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2.5,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.black,
+                                            ),
                                       ),
                                     )
                                   : Text(
@@ -387,13 +416,18 @@ class _AuthScreenState extends State<AuthScreen> {
                       });
                     },
                     style: TextButton.styleFrom(
-                      foregroundColor: _isSignUp ? primaryColor : secondaryColor,
+                      foregroundColor: _isSignUp
+                          ? primaryColor
+                          : secondaryColor,
                     ),
                     child: Text(
                       _isSignUp
                           ? 'Đã có tài khoản? Đăng nhập ngay'
                           : 'Chưa có tài khoản? Đăng ký ngay',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],

@@ -5,10 +5,11 @@ import 'caro_game_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   await Supabase.initialize(
     url: 'https://wffssmjnczlmvisqrnpp.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmZnNzbWpuY3psbXZpc3FybnBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3MjUyNzksImV4cCI6MjA5NjMwMTI3OX0.hTq1-YEWMQ2P2xvQWk7WxDs3owsx_6SkX7RRtH_HXkI',
+    anonKey:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmZnNzbWpuY3psbXZpc3FybnBwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3MjUyNzksImV4cCI6MjA5NjMwMTI3OX0.hTq1-YEWMQ2P2xvQWk7WxDs3owsx_6SkX7RRtH_HXkI',
   );
 
   runApp(const MyApp());
@@ -20,7 +21,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Caro Premium',
+      title: 'Caro',
       debugShowCheckedModeBanner: false, // Ẩn banner Debug ở góc màn hình
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: const Color(0xFF0F0F12),
@@ -42,7 +43,9 @@ class AuthGate extends StatelessWidget {
     return StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        final session = snapshot.data?.session ?? Supabase.instance.client.auth.currentSession;
+        final session =
+            snapshot.data?.session ??
+            Supabase.instance.client.auth.currentSession;
         if (session == null) {
           return const AuthScreen();
         } else {
@@ -52,4 +55,3 @@ class AuthGate extends StatelessWidget {
     );
   }
 }
-
